@@ -21,21 +21,11 @@ import com.maxmind.geoip2.exception.GeoIp2Exception;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.util.concurrent.TimeUnit;
-import java.util.zip.GZIPInputStream;
 import me.xneox.epicguard.core.EpicGuard;
-import me.xneox.epicguard.core.util.FileUtils;
 import me.xneox.epicguard.core.util.LogUtils;
 import me.xneox.epicguard.core.util.TextUtils;
-import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
-import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import org.jetbrains.annotations.NotNull;
 
-/**
- * This class manages the GeoLite2's databases, downloads and updates them if needed. It also
- * contains methods for easy database access.
- */
 public final class GeoManager {
   private final EpicGuard epicGuard;
 
@@ -49,64 +39,25 @@ public final class GeoManager {
     final var parent = epicGuard.getFolderPath().resolve("data");
     if (Files.notExists(parent)) {
       try {
-        Files.createDirectory(parent);
-      } catch (IOException e) {
-        // ignored
-      }
+        Files.createDirectories(parent);
+      } catch (IOException ignored) {}
     }
 
     final var countryDatabase = parent.resolve("GeoLite2-Country.mmdb");
     final var cityDatabase = parent.resolve("GeoLite2-City.mmdb");
 
-    final var countryArchive = parent.resolve("GeoLite2-Country.tar.gz");
-    final var cityArchive = parent.resolve("GeoLite2-City.tar.gz");
-
     try {
-      if (epicGuard.config().misc().geoDatabaseDownload()) {
-        final String geoIpKey = epicGuard.config().misc().getGeoDatabaseKey();
-        if (geoIpKey.isBlank()) {
-          return;
-        }
-        this.downloadDatabase(
-                countryDatabase,
-                countryArchive,
-                "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country&license_key="+geoIpKey+"&suffix=tar.gz");
-        this.downloadDatabase(
-                cityDatabase,
-                cityArchive,
-                "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key="+geoIpKey+"&suffix=tar.gz");
-
-      } else {
-        epicGuard.logger().info("GeoIP database download is disabled, skipping...");
-        return;
+      if (Files.exists(countryDatabase)) {
+        this.countryReader = new DatabaseReader.Builder(countryDatabase.toFile()).withCache(new CHMCache()).build();
+        epicGuard.logger().info("GeoIP Country database loaded successfully.");
       }
 
-      this.countryReader = new DatabaseReader.Builder(countryDatabase.toFile()).withCache(new CHMCache()).build();
-      this.cityReader = new DatabaseReader.Builder(cityDatabase.toFile()).withCache(new CHMCache()).build();
+      if (Files.exists(cityDatabase)) {
+        this.cityReader = new DatabaseReader.Builder(cityDatabase.toFile()).withCache(new CHMCache()).build();
+        epicGuard.logger().info("GeoIP City database loaded successfully.");
+      }
     } catch (IOException ex) {
-      LogUtils.catchException("Error while getting the GeoIP databases, please check your internet connection.", ex);
-    }
-  }
-
-  private void downloadDatabase(@NotNull Path database, @NotNull Path archive, @NotNull String url) throws IOException {
-    if (Files.notExists(database) || System.currentTimeMillis() - Files.getLastModifiedTime(database).to(TimeUnit.MILLISECONDS) > TimeUnit.DAYS.toMillis(7L)) {
-      // Database does not exist or is outdated, and need to be downloaded.
-      this.epicGuard.logger().info("Downloading the GeoIP database file: {}", database.getFileName());
-      FileUtils.downloadFile(url, archive);
-
-      this.epicGuard.logger().info("Extracting the database from the tar archive...");
-      try (var tarInput = new TarArchiveInputStream(new GZIPInputStream(Files.newInputStream(archive)))) {
-        TarArchiveEntry entry;
-        while ((entry = tarInput.getNextEntry()) != null) {
-          // Extracting the database (.mmdb) database we are looking for.
-          if (entry.getName().endsWith(database.getFileName().toString())) {
-            Files.copy(tarInput, database, StandardCopyOption.REPLACE_EXISTING);
-          }
-        }
-      }
-
-      Files.delete(archive);
-      this.epicGuard.logger().info("Database ({}) has been extracted successfully.", database.getFileName());
+      LogUtils.catchException("Error while loading the GeoIP databases from files.", ex);
     }
   }
 
