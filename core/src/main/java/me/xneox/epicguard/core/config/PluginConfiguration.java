@@ -420,10 +420,10 @@ public class PluginConfiguration {
     @Comment("Disable IPs in tab completion.")
     private boolean disableIpTabCompletion = false;
 
-    @Comment("Set to false to disable update checker.") ("This feature is disabled, you must put the city and country files in the data folder locally.")
+    @Comment("Set to false to disable update checker.")
     private boolean updateChecker = true;
 
-    @Comment("Set to false to not try to download the latest geolocation database.")
+    @Comment("Set to false to not try to download the latest geolocation database.") ("This feature is disabled, you must put the city and country files in the data folder locally.")
     private boolean geoDatabaseDownload = false;
 
     @Comment("MaxMind key for downloading the GeoIP database")
